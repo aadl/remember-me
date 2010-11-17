@@ -101,13 +101,32 @@ function remember_me_admin_settings() {
     '#options' => $options,
     '#description' => t('Duration a user will be remembered for. This setting is ignored if Manage session lifetime (above) is disabled.'),
   ) + $dependency;
+
+  if (function_exists('ipmap_labels')) {
+    if ($ipmap_ranges = variable_get('ipmap_ranges', NULL)) {
+      $rangepairs = explode(',', $ipmap_ranges);
+      foreach ($rangepairs as $rangepair) {
+        $rangepair = explode(':', $rangepair); // e.g. "IP Range:Label"
+        $range = $rangepair[0];
+        $label = $rangepair[1];
+        $form[$label.'_remember_me_lifetime'] = array(
+          '#type' => 'select',
+          '#title' => t($label .' Lifetime'),
+          '#default_value' => variable_get($label.'_remember_me_lifetime', 604800),
+          '#options' => $options,
+          '#description' => t('Duration a user will be remembered for. This setting is ignored if Manage session lifetime (above) is disabled.'),
+  ) + $dependency;
+      }
+    }
+  }
+
   $form['remember_me_checkbox'] = array(
     '#type' => 'checkbox',
     '#title' => t('Remember me field'),
-    '#default_value' => variable_get('remember_me_checkbox', 1),
-    '#description' => t('Default state of the "Remember me" field on the login forms.'),
+    '#default_value' => variable_get('remember_me_checkbox', 0),
+    '#description' => t('Default state of the "Remember me" field on the login forms. Leave unchecked in most cases.'),
   );
-
+  
   return system_settings_form($form);
 }
 
