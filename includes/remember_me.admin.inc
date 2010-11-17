@@ -12,7 +12,7 @@
 function remember_me_admin_settings() {
   global $user;
   $options = drupal_map_assoc(
-    array(3600, 10800, 21600, 43200, 86400, 172800, 259200, 604800, 1209600, 2419200),
+    array(60, 120, 300, 3600, 10800, 21600, 43200, 86400, 172800, 259200, 604800, 1209600, 2419200),
     'format_interval'
   );
   $dependency = array();
