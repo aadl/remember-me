@@ -1,0 +1,388 @@
+Index: remember_me/remember_me.module
+===================================================================
+--- remember_me/remember_me.module	(revision 12344)
++++ remember_me/remember_me.module	(working copy)
+@@ -8,20 +8,20 @@
+  */
+ 
+ /**
+- * Implementation of hook_init().
++ * Implements hook_init().
+  */
+ function remember_me_init() {
+   global $user;
+ 
+   // If we have a user logged in, then we have a session.
+   if ($user->uid) {
+-    if ($user->remember_me && variable_get('remember_me_managed', 0) != 0) {
++    if ($user->data['remember_me'] && variable_get('remember_me_managed', 0) != 0) {
+       // Set lifetime as configured via admin settings.
+       if (variable_get('remember_me_lifetime', 604800) != ini_get('session.cookie_lifetime')) {
+         _remember_me_set_lifetime(variable_get('remember_me_lifetime', 604800));
+       }
+     }
+-    else if (!$user->remember_me) {
++    elseif (!$user->data['remember_me']) {
+       // If we have cookie lifetime set already then unset it.
+       if (0 != ini_get('session.cookie_lifetime')) {
+         _remember_me_set_lifetime(0);
+@@ -39,61 +39,42 @@
+   // session again.
+   // Prevent sess_write from persisting the session object at this time,
+   // it will happen on shutdown.
+-  session_save_session(FALSE);
++  drupal_save_session(FALSE);
+   session_write_close();
+-  session_save_session(TRUE);
++  drupal_save_session(TRUE);
+ 
++  //var_dump ($cookie_lifetime);
++  //abc();
+   ini_set('session.cookie_lifetime', $cookie_lifetime);
+ 
+-  // Use remember_me_sess_read() to avoid reloading of user object, because
+-  // it might be once more reloaded in some other hook_init().
+-  session_set_save_handler(
+-    "sess_open",
+-    "sess_close",
+-    "remember_me_sess_read",
+-    "sess_write",
+-    "sess_destroy_sid",
+-    "sess_gc"
+-  );
+-  session_start();
+-}
++  // TODO: not overwriting session handler here anymore, still necessary?
+ 
+-/**
+- * Session handler 'read' callback.
+- */
+-function remember_me_sess_read() {
+-  global $user;
+-  static $run = FALSE;
+-  if (!$run) {
+-    $run = TRUE;
+-    return !empty($user->session) ? $user->session : '';
+-  }
+-  $args = func_get_args();
+-  return call_user_func_array('sess_read', $args);
++  drupal_session_started(FALSE);
++  drupal_session_initialize ();
+ }
+ 
+ /**
+- * Implementation of hook_user().
++ * Implements hook_user_login().
+  */
+-function remember_me_user($op, &$edit, &$user, $category = NULL) {
+-  if ($category === NULL && $op == 'login') {
+-    $remember_me = isset($edit['remember_me']) ? $edit['remember_me'] : NULL;
+-    if (isset($remember_me)) {
+-      if ($user->uid) {
+-        $user = user_save($user, array(
+-          'remember_me' => (bool) $remember_me,
++
++function remember_me_user_login(&$edit, $account) {
++  $remember_me = isset($edit['input']['remember_me']) ? $edit['input']['remember_me'] : false;
++  if ($account->uid) {
++    var_dump ($remember_me);
++    user_save($account, array(
++      'data' => array ('remember_me' => (bool) $remember_me),
+         ), NULL);
+       }
+-    }
++
++  // TODO: not tested if this still works
+     if (variable_get('remember_me_phantom_session', 0)) {
+       module_load_include('inc', 'remember_me', 'includes/remember_me');
+       remember_me_manage_phantom_sessions();
+     }
+   }
+-}
+ 
+ /**
+- * Implementation of hook_form_alter().
++ * Implements hook_form_alter().
+  */
+ function remember_me_form_alter(&$form, $form_state, $form_id) {
+   $user_login_forms = array('user_login', 'user_login_block');
+@@ -105,23 +86,23 @@
+ }
+ 
+ /**
+- * Implementation of hook_theme().
++ * Implements hook_theme().
+  */
+ function remember_me_theme() {
+   return array(
+     'remember_me_settings_display' => array(
+-      'arguments' => array('vars' => array()),
++      'variables' => array('vars' => array()),
+       'file' => 'includes/remember_me.admin.inc',
+     ),
+   );
+ }
+ 
+ /**
+- * Implementation of hook_menu().
++ * Implements hook_menu().
+  */
+ function remember_me_menu() {
+   $items = array();
+-  $items['admin/settings/remember_me'] = array(
++  $items['admin/config/system/remember_me'] = array(
+     'title'            => 'Remember me settings',
+     'description'      => 'Configure settings like session time out for remember_me module.',
+     'page callback'    => 'drupal_get_form',
+@@ -141,7 +122,7 @@
+     'page callback'    => 'remember_me_ajax_users_online',
+   ) + $base;
+ 
+-  $items['admin/settings/remember_me/users/online'] = array(
++  $items['admin/config/system/remember_me/users/online'] = array(
+     'page callback'    => 'drupal_get_form',
+     'page arguments'   => array('remember_me_ajax_users_online_form'),
+     'title'            => "'Who's online' settings",
+@@ -162,7 +143,7 @@
+ }
+ 
+ /**
+- * Implementation of hook_help().
++ * Implements hook_help().
+  */
+ function remember_me_help($path, $arg) {
+   switch ($path) {
+Index: remember_me/remember_me.install
+===================================================================
+--- remember_me/remember_me.install	(revision 12344)
++++ remember_me/remember_me.install	(working copy)
+@@ -7,21 +7,28 @@
+  */
+ 
+ /**
+- * Implementation of hook_install().
++ * Implements hook_install().
+  */
+ function remember_me_install() {
+   // Place session management first in the module queue
+-  db_query("UPDATE {system} SET weight = -99 WHERE name = 'remember_me'");
++  db_update('system')
++    ->fields(array(
++      'weight' =>  -99,
++    ))
++    ->condition('name', 'remember_me')
++  ->execute();
+ }
+ 
+ /**
+- * Implementation of hook_disable().
++ * Implements hook_disable().
+  */
+ function remember_me_disable() {
+   // Remove record from system table when disabling the module
+-  db_query("DELETE FROM {system} WHERE name = 'remember_me'");
++  db_delete('system')
++      ->condition('name', 'remember_me')
++    ->execute();
+   // User object data field will have 'remember_me' key forever after you disable the module, lets remove that.
+-  $result = db_query("SELECT uid FROM {users} WHERE data LIKE '%%remember_me%%'");
++  $result = db_query("SELECT uid FROM {users} WHERE data LIKE '%%remember_me%%'", array());
+   while ($user = db_fetch_object($result)) {
+     user_save($user, array('remember_me' => NULL), NULL);
+   }
+Index: remember_me/includes/remember_me.inc
+===================================================================
+--- remember_me/includes/remember_me.inc	(revision 12344)
++++ remember_me/includes/remember_me.inc	(working copy)
+@@ -17,13 +17,8 @@
+  */
+ function remember_me_manage_phantom_sessions() {
+   global $user;
+-  $interval = time() - variable_get('user_block_seconds_online', 900);
+-  $count = db_result(
+-    db_query("SELECT COUNT(uid) FROM {sessions} WHERE uid = %d AND timestamp >= %d",
+-      $user->uid,
+-      $interval
+-    )
+-  );
++  $interval = REQUEST_TIME - variable_get('user_block_seconds_online', 900);
++  $count = db_query("SELECT COUNT(uid) FROM {sessions} WHERE uid = :uid AND timestamp >= :timestamp", array(':uid' => $user->uid, ':timestamp' => $interval))->fetchField();
+   if ($count > 0) {
+     watchdog('remember_me',
+       t('Phantom session managed for %user, session trapped within %time timeout.'),
+@@ -34,11 +29,15 @@
+       ),
+       WATCHDOG_NOTICE
+     );
+-    db_query("UPDATE {sessions} SET timestamp = %d WHERE uid = %d AND timestamp >= %d",
+-      $interval - 1,
+-      $user->uid,
+-      $interval
+-    );
++    // TODO Please review the conversion of this statement to the D7 database API syntax.
++    /* db_query("UPDATE {sessions} SET timestamp = %d WHERE uid = %d AND timestamp >= %d", $interval - 1, $user->uid, $interval) */
++db_update('sessions')
++  ->fields(array(
++    'timestamp' => $interval - 1,
++  ))
++    ->condition('uid', $user->uid)
++    ->condition('timestamp', $interval, '>=')
++  ->execute();
+   }
+ }
+ 
+Index: remember_me/includes/remember_me.users.inc
+===================================================================
+--- remember_me/includes/remember_me.users.inc	(revision 12344)
++++ remember_me/includes/remember_me.users.inc	(working copy)
+@@ -27,6 +27,7 @@
+ 
+       $output   = array();
+       $output[] = ctools_ajax_command_remove( 'div.messages');
++      // TODO Please change this theme call to use an associative array for the $variables parameter.
+       $output[] = ctools_ajax_command_before(
+         'form#remember-me-admin-settings',
+         theme('status_messages')
+Index: remember_me/includes/remember_me.admin.inc
+===================================================================
+--- remember_me/includes/remember_me.admin.inc	(revision 12344)
++++ remember_me/includes/remember_me.admin.inc	(working copy)
+@@ -9,10 +9,10 @@
+ /**
+  * Implementation of menu callback.
+  */
+-function remember_me_admin_settings() {
++function remember_me_admin_settings($form, &$form_state) {
+   global $user;
+   $options = drupal_map_assoc(
+-    array(3600, 10800, 21600, 43200, 86400, 172800, 259200, 604800, 1209600, 2419200),
++    array(3600, 10800, 21600, 43200, 86400, 172800, 259200, 604800, 1209600, 2592000, 5184000, 7776000),
+     'format_interval'
+   );
+   $dependency = array();
+@@ -37,14 +37,14 @@
+   else {
+     $link = l(
+       t('Configure Who\'s online settings'),
+-      'admin/settings/remember_me/users/online',
++      'admin/config/system/remember_me/users/online',
+       array(
+         'attributes' => array(
+           'title' => t('Who\'s online settings.'),
+           'class' => 'remember-me-users-online',
+         ),
+         'query' => array(
+-          'destination' => 'admin/settings/remember_me',
++          'destination' => 'admin/config/system/remember_me',
+         ),
+       )
+     );
+@@ -54,7 +54,7 @@
+     'remember' => array(
+       '#type' => 'item',
+       '#title' => t('Remember me'),
+-      '#value' => $user->remember_me ? t('Yes') : t('No'),
++      '#value' => isset($user->data['remember_me']) && $user->data['remember_me'] ? t('Yes') : t('No'),
+       '#description' => t("Current user chose at log in."),
+     ),
+     'session' => array(
+@@ -74,7 +74,7 @@
+   );
+   $form['legend'] = array(
+     '#type'        => 'markup',
+-    '#value'       => theme('remember_me_settings_display', $vars),
++    '#markup'      => theme('remember_me_settings_display', array('vars' => $vars)),
+   );
+ 
+   $form['remember_me_phantom_session'] = array(
+@@ -104,7 +104,7 @@
+   $form['remember_me_checkbox'] = array(
+     '#type' => 'checkbox',
+     '#title' => t('Remember me field'),
+-    '#default_value' => variable_get('remember_me_checkbox', 1),
++    '#default_value' => variable_get('remember_me_checkbox', 0),
+     '#description' => t('Default state of the "Remember me" field on the login forms.'),
+   );
+ 
+@@ -112,21 +112,50 @@
+ }
+ 
+ 
+-function theme_remember_me_settings_display($vars) {
+-  $rows = array();
++/**
++ * @todo Please document this function.
++ * @see http://drupal.org/node/1354
++ */
++function theme_remember_me_settings_display($variables) {
++  $vars = $variables['vars'];
++  $cells = array();
+   foreach($vars as $var) {
+-    $desc = $var['#description'];
+-    unset($var['#description']);
+-    $output = '<div class="container-inline">'. theme('item', $var) .'</div>';
+-    $output .= '<div class="description">'. $desc .'</div>';
++    $var['#title_display'] = 'before';
++    $element = array ('element' => array (
++      '#type' => 'markup',
++      '#children' => $var['#value'],
++      '#title' => $var['#title'],
++      '#title_display' => 'before',
++    ));
++    $output = '<div class="container-inline">' . theme('form_element', $element) . '</div>';
++    $output .= '<div class="description">' . $var['#description'] . '</div>';
++    $cells[] = $output;
++    /*
+     $rows[] = $output;
+     if(is_array($rows[0])) {
+       $rows[1] = array($rows[1]);
+     }
+     else if(sizeof($rows) == 2) {
+       $rows = array(array('data' => $rows, 'class' => 'even'));
++      break;
+     }
++    */
+   }
++  $rows = array (
++    0 => array (
++      0 => array ('data' => $cells[0]),
++      1 => array ('data' => $cells[1])),
++    1 => array (
++      0 => array ('data' => $cells[2]),
++      1 => array ('data' => '')));
+ 
+-  return theme('table', array(), $rows);
++  //var_dump ($rows);
++  //$rows = array ();
++  //$rows[] = array (array ('data' => 'abc'), array ('data' => 'def'));
++  //var_dump ($rows);
++  //$rows = array (0 => array (0 => array ('data' => 'comment'), 1 => array ('data' => 'publish')));
++  //$rows = array();
++  $output = theme('table', array('rows' => $rows));
++  //var_dump ($output);
++  return $output;
+ }
+\ No newline at end of file
+Index: remember_me/remember_me.info
+===================================================================
+--- remember_me/remember_me.info	(revision 12344)
++++ remember_me/remember_me.info	(working copy)
+@@ -1,10 +1,16 @@
+ ; $Id: remember_me.info,v 1.7.2.1 2009/05/25 15:09:03 nickl Exp $
+ name = Remember me
+ description = "Adds a ''Remember me'' checkbox to login forms."
+-core = 6.x
++core = 7.x
+ ; Information added by drupal.org packaging script on 2009-05-25
+ version = "6.x-2.1"
+-core = "6.x"
++core = 7.x
+ project = "remember_me"
+ datestamp = "1243275270"
+ 
++
++files[] = remember_me.install
++files[] = remember_me.module
++files[] = includes/remember_me.admin.inc
++files[] = includes/remember_me.inc
++files[] = includes/remember_me.users.inc
