@@ -23,9 +23,9 @@ function remember_me_init() {
     }
     else if (!$user->remember_me) {
       // If we have cookie lifetime set already then unset it.
-      if (0 != ini_get('session.cookie_lifetime')) {
-        _remember_me_set_lifetime(0);
-      }
+      //if (0 != ini_get('session.cookie_lifetime')) {
+      //  _remember_me_set_lifetime(0);
+      //}
     }
   }
 }
