@@ -15,13 +15,21 @@ function remember_me_init() {
 
   // If we have a user logged in, then we have a session.
   if ($user->uid) {
-    if ($user->remember_me && variable_get('remember_me_managed', 0) != 0) {
-      // Set lifetime as configured via admin settings.
-      if (variable_get('remember_me_lifetime', 604800) != ini_get('session.cookie_lifetime')) {
-        _remember_me_set_lifetime(variable_get('remember_me_lifetime', 604800));
-      }
+    #labels take precendent. should take into account multiple labels
+    if (function_exists('ipmap_labels')) {
+        $labels = ipmap_labels();
+        foreach($labels as $label) {
+          if(variable_get($label.'_remember_me_lifetime') && variable_get('remember_me_managed', 0) != 0) {
+            _remember_me_set_lifetime(variable_get($label.'_remember_me_lifetime', 604800));
+            $changed = TRUE;
+          }
+        }
     }
-    else if (!$user->remember_me) {
+    if ($user->remember_me && variable_get('remember_me_managed', 0) != 0 && !$changed) {
+      // Set lifetime as configured via admin settings.
+        _remember_me_set_lifetime(variable_get('remember_me_lifetime', 604800));
+    }
+    else if (!$user->remember_me  && !$changed) {
       // If we have cookie lifetime set already then unset it.
       //if (0 != ini_get('session.cookie_lifetime')) {
       //  _remember_me_set_lifetime(0);

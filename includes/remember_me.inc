@@ -49,6 +49,7 @@ function remember_me_manage_phantom_sessions() {
 function remember_me_insert_checkbox(&$form) {
   $form1['remember_me'] = array(
     '#title'         => t('Remember me'),
+    '#description'   => t("Remember me will keep you logged in until you manually log out. Don't check on public stations"),
     '#type'          => 'checkbox',
     '#default_value' => variable_get('remember_me_checkbox', 0),
   );
