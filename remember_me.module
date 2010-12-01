@@ -106,7 +106,7 @@ function remember_me_user($op, &$edit, &$user, $category = NULL) {
 function remember_me_form_alter(&$form, $form_state, $form_id) {
   $user_login_forms = array('user_login', 'user_login_block');
 
-  if (in_array($form_id, $user_login_forms)) {
+  if (in_array($form_id, $user_login_forms) && !in_array('public',ipmap_labels())) {
     module_load_include('inc', 'remember_me', 'includes/remember_me');
     remember_me_insert_checkbox($form);
   }
