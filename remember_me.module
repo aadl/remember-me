@@ -19,7 +19,7 @@ function remember_me_init() {
     if (function_exists('ipmap_labels')) {
         $labels = ipmap_labels();
         foreach($labels as $label) {
-          if(variable_get($label.'_remember_me_lifetime') && variable_get('remember_me_managed', 0) != 0) {
+          if(variable_get($label.'_remember_me_lifetime',0) != 0 && variable_get('remember_me_managed', 0) != 0) {
             _remember_me_set_lifetime(variable_get($label.'_remember_me_lifetime', 604800));
             $changed = TRUE;
           }
